@@ -15,6 +15,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const avatarBadge = document.querySelector('.avatar-badge');
     const avatarInput = document.getElementById('avatarInput');
 
+    // === Смена пароля (инлайн-стиль) ===
+    const changePasswordBtn = document.getElementById('changePasswordBtn');
+    const changePasswordForm = document.getElementById('changePasswordForm');
+    const cancelChangePassword = document.getElementById('cancelChangePassword');
+    const passwordPlaceholder = document.getElementById('passwordPlaceholder');
+
     // Загрузка данных профиля
     async function loadProfileData() {
         try {
@@ -25,7 +31,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
             
             // Заполнение полей данными
-            profilePic.src = data.profile_pic;
+            profilePic.src = data.profile_pic || '/profile_pics/default.png';
             firstName.textContent = data.first_name;
             lastName.textContent = data.last_name;
             email.textContent = data.email;
@@ -86,18 +92,30 @@ document.addEventListener('DOMContentLoaded', function() {
     function handleApiError(errorData, field) {
         // Если ошибка строка
         if (typeof errorData === 'string') {
+            if (field && field.classList) {
+                field.classList.add('error');
+                setTimeout(() => field.classList.remove('error'), 5000);
+            }
             showGlobalError(errorData);
             return;
         }
 
         // Если ошибка массив
         if (Array.isArray(errorData)) {
+            if (field && field.classList) {
+                field.classList.add('error');
+                setTimeout(() => field.classList.remove('error'), 5000);
+            }
             showGlobalError(errorData[0]);
             return;
         }
 
         // Если ошибка объект с message
         if (errorData.message) {
+            if (field && field.classList) {
+                field.classList.add('error');
+                setTimeout(() => field.classList.remove('error'), 5000);
+            }
             showGlobalError(errorData.message);
             return;
         }
@@ -107,6 +125,20 @@ document.addEventListener('DOMContentLoaded', function() {
             let found = false;
             let globalMessages = [];
             Object.keys(errorData).forEach(key => {
+                // Найти поле на странице по data-field
+                const input = document.querySelector(`[data-field="${key}"]`);
+                if (input && input.classList) {
+                    input.classList.add('error');
+                    setTimeout(() => input.classList.remove('error'), 5000);
+                }
+                // Для аватарки
+                if (key === 'profile_pic') {
+                    const pic = document.getElementById('profilePic');
+                    if (pic) {
+                        pic.classList.add('error');
+                        setTimeout(() => pic.classList.remove('error'), 5000);
+                    }
+                }
                 const msg = Array.isArray(errorData[key]) ? errorData[key][0] : errorData[key];
                 globalMessages.push(msg);
                 found = true;
@@ -118,6 +150,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // Если формат ошибки не распознан
+        if (field && field.classList) {
+            field.classList.add('error');
+            setTimeout(() => field.classList.remove('error'), 5000);
+        }
         showGlobalError('Произошла ошибка при обновлении данных');
     }
 
@@ -253,8 +289,8 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Обработчик клика по аватарке
-    avatarBadge.addEventListener('click', () => {
+    // Обработчик клика по аватарке (только по картинке)
+    profilePic.addEventListener('click', () => {
         avatarInput.click();
     });
 
@@ -302,6 +338,32 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // Обработчик удаления аватарки
+    const removeAvatarBtn = document.getElementById('removeAvatarBtn');
+    if (removeAvatarBtn) {
+        removeAvatarBtn.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/v1/custom_user_profile/', {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({ profile_pic: null })
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    handleApiError(data, document.getElementById('profilePic'));
+                    return;
+                }
+                profilePic.src = data.profile_pic;
+                showGlobalError('Аватарка удалена');
+            } catch (error) {
+                showGlobalError('Не удалось удалить аватарку');
+            }
+        });
+    }
+
     // Делегированная логика раскрытия бейджей (как в user_external_organizations.js)
     const orgDetails = document.querySelector('.organization-details');
     if (orgDetails) {
@@ -338,4 +400,142 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Загрузка данных при открытии страницы
     loadProfileData();
+
+    // === Смена пароля (инлайн-стиль) ===
+    if (changePasswordBtn && changePasswordForm && cancelChangePassword && passwordPlaceholder) {
+        changePasswordBtn.addEventListener('click', function() {
+            changePasswordForm.style.display = 'flex';
+            changePasswordBtn.style.display = 'none';
+            passwordPlaceholder.style.display = 'none';
+        });
+        cancelChangePassword.addEventListener('click', function() {
+            changePasswordForm.style.display = 'none';
+            changePasswordBtn.style.display = '';
+            passwordPlaceholder.style.display = '';
+            changePasswordForm.reset();
+        });
+        changePasswordForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const currentPassword = document.getElementById('oldPassword').value;
+            const newPassword = document.getElementById('newPassword1').value;
+            const newPasswordConfirmation = document.getElementById('newPassword2').value;
+
+            // === JS-валидация пароля ===
+            if (newPassword.length < 8) {
+                showGlobalError('Пароль должен содержать минимум 8 символов');
+                return;
+            }
+            if (!/[0-9]/.test(newPassword)) {
+                showGlobalError('Пароль должен содержать хотя бы одну цифру');
+                return;
+            }
+            if (!/[A-Z]/.test(newPassword)) {
+                showGlobalError('Пароль должен содержать хотя бы одну заглавную букву');
+                return;
+            }
+            if (!/[a-z]/.test(newPassword)) {
+                showGlobalError('Пароль должен содержать хотя бы одну строчную букву');
+                return;
+            }
+            if (newPassword !== newPasswordConfirmation) {
+                showGlobalError('Пароли не совпадают');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/v1/custom_user_change_password/', {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({
+                        current_password: currentPassword,
+                        new_password: newPassword,
+                        new_password_confirmation: newPasswordConfirmation
+                    })
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    let errorMsg = '';
+                    if (typeof data === 'object' && data !== null) {
+                        if (data.detail) errorMsg = data.detail;
+                        else errorMsg = Object.values(data).flat().join('\n');
+                    } else {
+                        errorMsg = 'Ошибка смены пароля';
+                    }
+                    showGlobalError(errorMsg);
+                    return;
+                }
+                showGlobalError('Пароль успешно изменён');
+                changePasswordForm.style.display = 'none';
+                changePasswordBtn.style.display = '';
+                passwordPlaceholder.style.display = '';
+                changePasswordForm.reset();
+            } catch (error) {
+                showGlobalError('Ошибка соединения с сервером');
+            }
+        });
+    }
+
+    // === Глазик для показа/скрытия пароля ===
+    document.querySelectorAll('#changePasswordForm .toggle-password').forEach(button => {
+        button.addEventListener('click', function() {
+            const input = this.closest('.password-wrapper').querySelector('input');
+            const icon = this.querySelector('i');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.classList.replace('fa-eye', 'fa-eye-slash');
+            } else {
+                input.type = 'password';
+                icon.classList.replace('fa-eye-slash', 'fa-eye');
+            }
+        });
+    });
+
+    // === Динамическая полоска сложности пароля (только полоска, без текста) ===
+    const newPasswordInput = document.getElementById('newPassword1');
+    let strengthBar = null;
+    if (newPasswordInput) {
+        // Ищем .strength-bar после поля пароля
+        strengthBar = newPasswordInput.closest('form').querySelector('.strength-bar');
+    }
+    if (newPasswordInput && strengthBar) {
+        newPasswordInput.addEventListener('input', function() {
+            const strength = checkPasswordStrength(this.value);
+            strengthBar.className = 'strength-bar';
+            if (this.value.length === 0) {
+                strengthBar.style.width = '0';
+                strengthBar.style.background = '';
+                return;
+            }
+            if (strength === 'weak') {
+                strengthBar.style.width = '30%';
+                strengthBar.style.background = '#e74c3c';
+            } else if (strength === 'medium') {
+                strengthBar.style.width = '60%';
+                strengthBar.style.background = '#f39c12';
+            } else {
+                strengthBar.style.width = '100%';
+                strengthBar.style.background = '#2ecc71';
+            }
+        });
+    }
+
+    // === Функция для проверки силы пароля (как в reg.js) ===
+    function checkPasswordStrength(password) {
+        if (password.length < 8) return 'weak';
+        const hasUpper = /[A-Z]/.test(password);
+        const hasLower = /[a-z]/.test(password);
+        const hasNumber = /[0-9]/.test(password);
+        const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+        let score = 0;
+        if (hasUpper && hasLower) score += 2;
+        if (hasNumber) score++;
+        if (hasSpecial) score++;
+        if (password.length >= 10) score++;
+        if (score <= 2) return 'weak';
+        if (score <= 4) return 'medium';
+        return 'strong';
+    }
 }); 
